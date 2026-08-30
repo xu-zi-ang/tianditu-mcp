@@ -1,0 +1,16 @@
+{
+  "name": "tianditu-mcp",
+  "version": "1.0.0",
+  "description": "天地图 MCP Server：为 AI 霞客提供地理编码/POI搜索/路线规划工具",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js",
+    "start:stdio": "node src/index.js --stdio"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "express": "^4.21.0"
+  },
+  "engines": { "node": ">=18" }
+}
