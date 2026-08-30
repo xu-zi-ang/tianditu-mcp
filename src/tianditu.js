@@ -41,8 +41,9 @@ async function rateLimit() {
 }
 
 // ===== 核心请求（带重试/超时/缓存/单飞）=====
-async function tdtRequest(path, postStr, { ttlMs = 10 * 60 * 1000, type = 'query' } = {}) {
-  const cacheKey = path + postStr + type;
+// paramField：postStr（默认）/ ds（正地理编码 geocoder 专用）
+async function tdtRequest(path, postStr, { ttlMs = 10 * 60 * 1000, type = 'query', paramField = 'postStr' } = {}) {
+  const cacheKey = path + postStr + type + paramField;
   const hit = cacheGet(cacheKey);
   if (hit) return hit;
 
@@ -50,7 +51,7 @@ async function tdtRequest(path, postStr, { ttlMs = 10 * 60 * 1000, type = 'query
 
   const p = (async () => {
     await rateLimit();
-    const url = `${TIANDITU_BASE}${path}?postStr=${encodeURIComponent(postStr)}&type=${type}&tk=${tk}`;
+    const url = `${TIANDITU_BASE}${path}?${paramField}=${encodeURIComponent(postStr)}&type=${type}&tk=${tk}`;
     let lastErr;
     for (let i = 0; i < 3; i++) {
       try {
@@ -106,7 +107,7 @@ function parseDriveXml(xml) {
 
 // 1. 正地理编码：地址 → 坐标
 async function geocode(keyWord) {
-  const r = await tdtRequest('/geocoder', JSON.stringify({ keyWord }), { ttlMs: 24 * 3600 * 1000 });
+  const r = await tdtRequest('/geocoder', JSON.stringify({ keyWord }), { ttlMs: 24 * 3600 * 1000, paramField: 'ds' });
   if (r.status !== '0' || !r.location) return { found: false, msg: r.msg || '未解析到坐标' };
   return {
     found: true,
