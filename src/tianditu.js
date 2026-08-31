@@ -225,7 +225,10 @@ async function transitRoute({ origLon, origLat, destLon, destLat, linetype = '1'
     });
     if (routes.length >= 3) break;
   }
-  if (!routes.length) return { found: false, msg: '公交规划无可用线路' };
+  if (!routes.length) {
+    // ★ 调试透传：真实返回结构与文档不符时，把原始返回截断带回，一眼定位字段差异
+    return { found: false, msg: '公交规划无可用线路', raw: JSON.stringify(r).slice(0, 600) };
+  }
   return {
     found: true,
     durationMin: routes[0].durationMin,
