@@ -1,4 +1,4 @@
-// MCP 工具定义：6 个工具，覆盖天地图 5 类 API
+// MCP 工具定义：7 个工具，覆盖天地图 6 类 API（含公交规划）
 // 每个：name / description（给模型看，决定调用准确率）/ inputSchema / handler
 const tdt = require('./tianditu');
 
@@ -69,6 +69,22 @@ const TOOLS = [
       required: ['origLon', 'origLat', 'destLon', 'destLat'],
     },
     async handler(p) { return tdt.driveRoute(p); },
+  },
+  {
+    name: 'transit_route',
+    description: '公交/地铁路线规划：起点到终点的公共交通方案（公交+地铁）。返回最优方案总时长(分钟)、距离(公里)、乘车线路名（如"地铁2号线→4号线"）、换乘次数、步行时长、备选线路。适合"坐地铁怎么去/公交多久/不打车怎么走"。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        origLon: { type: 'number', description: '起点经度' },
+        origLat: { type: 'number', description: '起点纬度' },
+        destLon: { type: 'number', description: '终点经度' },
+        destLat: { type: 'number', description: '终点纬度' },
+        linetype: { type: 'string', description: '规划类型位掩码：1较快捷(默认) 2少换乘 4少步行 8不坐地铁，可组合如"3"' },
+      },
+      required: ['origLon', 'origLat', 'destLon', 'destLat'],
+    },
+    async handler(p) { return tdt.transitRoute(p); },
   },
   {
     name: 'admin_district',

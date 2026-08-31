@@ -180,6 +180,61 @@ async function driveRoute({ origLon, origLat, destLon, destLat, style = 0, waypo
   return { found: true, ...parsed };
 }
 
+// 4b. 公交/地铁路线规划（官方 transit 接口，文档 lbs.tianditu.gov.cn/server/bus.html）
+// linetype 位掩码：第0位1=较快捷，第1位1=少换乘，第2位1=少步行，第3位1=不坐地铁；默认"1"较快捷
+// 返回 {found, durationMin, distanceKm, hasSubway, routes:[{name, durationMin, transferCount, walkMin, distanceKm}]}
+async function transitRoute({ origLon, origLat, destLon, destLat, linetype = '1' }) {
+  const post = JSON.stringify({
+    startposition: origLon + ',' + origLat,
+    endposition: destLon + ',' + destLat,
+    linetype: String(linetype || '1'),
+  });
+  const r = await tdtRequest('/transit', post, { ttlMs: 5 * 60 * 1000, type: 'busline' });
+  if (!r || r.resultCode !== 0 || !r.results || !r.results.length) {
+    return { found: false, msg: r && r.message ? r.message : '公交规划无结果' };
+  }
+  // 汇总各请求类型（linetype 位）下的线路，取每类第一条，最多 3 条备选
+  const routes = [];
+  for (const typeRes of r.results) {
+    const line = typeRes && typeRes.lines && typeRes.lines[0];
+    if (!line || !line.segments) continue;
+    let totalSec = 0, totalM = 0, walkSec = 0;
+    const names = [];
+    for (const seg of line.segments) {
+      const sl = seg.segmentLine || {};
+      const t = parseInt(sl.segmentTime, 10) || 0;      // 分钟
+      const d = parseFloat(sl.segmentDistance) || 0;    // 米
+      const st = parseInt(seg.segmentType, 10) || 0;
+      totalSec += t;
+      totalM += d;
+      if (st === 1) walkSec += t;                       // segmentType 1=步行段
+      // 2=公交 3=地铁：记线路名（segmentName 优先，退 direction）
+      if (st === 2 || st === 3) {
+        const nm = sl.segmentName || sl.direction || '';
+        if (nm && names.indexOf(nm) < 0) names.push(nm);
+      }
+    }
+    if (!totalSec && !totalM) continue;
+    routes.push({
+      name: names.slice(0, 3).join('→') || '公交',
+      durationMin: totalSec,
+      distanceKm: Math.round(totalM / 100) / 10,
+      walkMin: walkSec,
+      transferCount: Math.max(0, names.length - 1),
+      isSubway: names.some(n => /地铁|号线/.test(n)),
+    });
+    if (routes.length >= 3) break;
+  }
+  if (!routes.length) return { found: false, msg: '公交规划无可用线路' };
+  return {
+    found: true,
+    durationMin: routes[0].durationMin,
+    distanceKm: routes[0].distanceKm,
+    hasSubway: r.hasSubway === 1 || r.hasSubway === true,
+    routes,
+  };
+}
+
 // 5. 行政区划：名称/编码 → 中心点+轮廓+下级
 async function adminDistrict({ keyword, childLevel = 0, extensions = false }) {
   const url = `${TIANDITU_BASE}/v2/administrative?keyword=${encodeURIComponent(keyword)}&childLevel=${childLevel}&extensions=${extensions}&tk=${tk}`;
@@ -204,4 +259,4 @@ async function adminDistrict({ keyword, childLevel = 0, extensions = false }) {
   return out;
 }
 
-module.exports = { geocode, reverseGeocode, searchPoi, driveRoute, adminDistrict };
+module.exports = { geocode, reverseGeocode, searchPoi, driveRoute, transitRoute, adminDistrict };
