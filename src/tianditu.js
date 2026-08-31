@@ -201,20 +201,24 @@ async function transitRoute({ origLon, origLat, destLon, destLat, linetype = '1'
     let totalSec = 0, totalM = 0, walkSec = 0;
     const names = [];
     for (const seg of line.segments) {
-      // ★ 真实返回 segmentLine 是【数组】（每段线路内容列表），文档写成了单对象——兼容两种
+      // ★ 真实返回 segmentLine 是【数组】且字段可能分散在数组各项——逐项求和而非只取[0]
       const rawSl = seg.segmentLine;
-      const sl = Array.isArray(rawSl) ? (rawSl[0] || {}) : (rawSl || {});
-      const t = parseInt(sl.segmentTime, 10) || 0;      // 分钟
-      const d = parseFloat(sl.segmentDistance) || 0;    // 米
+      const slItems = Array.isArray(rawSl) ? rawSl : (rawSl ? [rawSl] : []);
       const st = parseInt(seg.segmentType, 10) || 0;
-      totalSec += t;
-      totalM += d;
-      if (st === 1) walkSec += t;                       // segmentType 1=步行段
-      // 2=公交 3=地铁：记线路名（segmentName 优先，退 direction；lineName 兜底带"|"尾巴需清洗）
-      if (st === 2 || st === 3) {
-        const nm = String(sl.segmentName || sl.direction || sl.lineName || '').replace(/\s*\|\s*$/, '').trim();
-        if (nm && names.indexOf(nm) < 0) names.push(nm);
+      let segT = 0, segD = 0, nm = '';
+      for (const sl of slItems) {
+        if (!sl) continue;
+        segT += parseInt(sl.segmentTime, 10) || 0;      // 分钟
+        segD += parseFloat(sl.segmentDistance) || 0;    // 米
+        if (!nm) {
+          nm = String(sl.segmentName || sl.direction || sl.lineName || '')
+            .replace(/\s*\|\s*$/, '').replace(/\(.*?\)/g, '').trim();
+        }
       }
+      totalSec += segT;
+      totalM += segD;
+      if (st === 1) walkSec += segT;                    // segmentType 1=步行段
+      if ((st === 2 || st === 3) && nm && names.indexOf(nm) < 0) names.push(nm);
     }
     if (!totalSec && !totalM) continue;
     routes.push({
@@ -231,12 +235,15 @@ async function transitRoute({ origLon, origLat, destLon, destLat, linetype = '1'
     // ★ 调试透传：真实返回结构与文档不符时，把原始返回截断带回，一眼定位字段差异
     return { found: false, msg: '公交规划无可用线路', raw: JSON.stringify(r).slice(0, 600) };
   }
+  // 防御：负值/异常数据兜底（实测出现过负数，宁缺勿错）
+  const best = routes.find(x => x.durationMin > 0 || x.distanceKm > 0);
+  if (!best) return { found: false, msg: '公交规划数据异常', raw: JSON.stringify(routes).slice(0, 400) };
   return {
     found: true,
-    durationMin: routes[0].durationMin,
-    distanceKm: routes[0].distanceKm,
+    durationMin: Math.max(0, best.durationMin),
+    distanceKm: Math.max(0, best.distanceKm),
     hasSubway: r.hasSubway === 1 || r.hasSubway === true,
-    routes,
+    routes: routes.filter(x => x.durationMin > 0 || x.distanceKm > 0),
   };
 }
 
