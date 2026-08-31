@@ -201,22 +201,24 @@ async function transitRoute({ origLon, origLat, destLon, destLat, linetype = '1'
     let totalSec = 0, totalM = 0, walkSec = 0;
     const names = [];
     for (const seg of line.segments) {
-      const sl = seg.segmentLine || {};
+      // ★ 真实返回 segmentLine 是【数组】（每段线路内容列表），文档写成了单对象——兼容两种
+      const rawSl = seg.segmentLine;
+      const sl = Array.isArray(rawSl) ? (rawSl[0] || {}) : (rawSl || {});
       const t = parseInt(sl.segmentTime, 10) || 0;      // 分钟
       const d = parseFloat(sl.segmentDistance) || 0;    // 米
       const st = parseInt(seg.segmentType, 10) || 0;
       totalSec += t;
       totalM += d;
       if (st === 1) walkSec += t;                       // segmentType 1=步行段
-      // 2=公交 3=地铁：记线路名（segmentName 优先，退 direction）
+      // 2=公交 3=地铁：记线路名（segmentName 优先，退 direction；lineName 兜底带"|"尾巴需清洗）
       if (st === 2 || st === 3) {
-        const nm = sl.segmentName || sl.direction || '';
+        const nm = String(sl.segmentName || sl.direction || sl.lineName || '').replace(/\s*\|\s*$/, '').trim();
         if (nm && names.indexOf(nm) < 0) names.push(nm);
       }
     }
     if (!totalSec && !totalM) continue;
     routes.push({
-      name: names.slice(0, 3).join('→') || '公交',
+      name: names.slice(0, 3).join('→') || line.lineName && String(line.lineName).replace(/\s*\|\s*$/, '').trim() || '公交',
       durationMin: totalSec,
       distanceKm: Math.round(totalM / 100) / 10,
       walkMin: walkSec,
